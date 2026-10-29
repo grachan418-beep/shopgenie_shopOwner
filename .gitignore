@@ -1,0 +1,84 @@
+# =========================
+# Flutter
+# =========================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Flutter generated files
+**/build/
+**/.dart_tool/
+
+# =========================
+# Android / Gradle
+# =========================
+.gradle/
+**/.gradle/
+local.properties
+**/local.properties
+
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+/captures/
+/.externalNativeBuild/
+/.cxx/
+
+# =========================
+# Python / Django
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Python / CV temporary files
+# =========================
+*.log
+*.tmp
+*.temp
+
+# =========================
+# IDE
+# =========================
+.vscode/
+# Android Studio / IntelliJ
+.idea/
