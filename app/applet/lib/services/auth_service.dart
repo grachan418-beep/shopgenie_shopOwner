@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/auth_response.dart';
 import '../models/user.dart';
 import 'api_service.dart';
@@ -18,6 +22,64 @@ class AuthService {
 
   bool get isWorkerSession =>
       const {'WORKER', 'SHOP_WORKER'}.contains(_api.sessionRole?.toUpperCase());
+
+  Future<User?> getCachedProfile() async {
+    var response = await _api.readCachedResponse(
+      'shop_profile',
+      legacyPath: '/api/auth/me/',
+    );
+    if (response == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final legacyEntry = prefs.getString('sp_profile_cache');
+      if (legacyEntry != null) {
+        try {
+          final decoded = jsonDecode(legacyEntry);
+          if (decoded is Map<String, dynamic>) {
+            final profile = decoded['data'] is Map<String, dynamic>
+                ? decoded['data']
+                : decoded;
+            final savedAt = decoded['saved_at'] is int
+                ? DateTime.fromMillisecondsSinceEpoch(
+                    decoded['saved_at'] as int)
+                : DateTime.now();
+            await _api.writeCachedResponse(
+              'shop_profile',
+              profile,
+              path: '/api/auth/me/',
+              savedAt: savedAt,
+            );
+            response = profile;
+          }
+        } on FormatException {
+          // Ignore an unreadable legacy entry and continue with the network.
+        }
+      }
+    }
+    if (response is! Map<String, dynamic>) return null;
+
+    final profile = response['user'] is Map<String, dynamic>
+        ? response['user'] as Map<String, dynamic>
+        : response;
+    _currentUser = User.fromJson(profile);
+    return _currentUser;
+  }
+
+  Future<DateTime?> getCachedProfileUpdatedAt() =>
+      _api.readCachedResponseUpdatedAt(
+        'shop_profile',
+        legacyPath: '/api/auth/me/',
+      );
+
+  Future<Map<String, dynamic>?> getCachedSettings() async {
+    final response = await _api.readCachedResponse('shop_settings');
+    return response is Map<String, dynamic> ? response : null;
+  }
+
+  Future<DateTime?> getCachedSettingsUpdatedAt() =>
+      _api.readCachedResponseUpdatedAt('shop_settings');
+
+  Future<void> cacheSettings(Map<String, dynamic> settings) =>
+      _api.writeCachedResponse('shop_settings', settings);
 
   Future<AuthResponse> login(String username, String password) async {
     final response = await _api.post('/api/auth/login/',
@@ -109,7 +171,10 @@ class AuthService {
   }
 
   Future<User?> fetchProfile() async {
-    final response = await _api.get('/api/auth/me/');
+    final response = await _api.get(
+      '/api/auth/me/',
+      cacheKey: 'shop_profile',
+    );
     if (response is! Map<String, dynamic>) {
       throw ApiException('The server returned an invalid profile response.');
     }

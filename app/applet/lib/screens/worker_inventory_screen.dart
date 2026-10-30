@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/product.dart';
+import '../services/api_cache_listener.dart';
 import '../services/product_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
@@ -13,7 +14,8 @@ class WorkerInventoryScreen extends StatefulWidget {
   State<WorkerInventoryScreen> createState() => _WorkerInventoryScreenState();
 }
 
-class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
+class _WorkerInventoryScreenState extends State<WorkerInventoryScreen>
+    with ApiCacheListener<WorkerInventoryScreen> {
   final ProductService _productsService = ProductService();
   List<Product> _products = [];
   bool _isLoading = true;
@@ -22,12 +24,26 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
   @override
   void initState() {
     super.initState();
+    startListeningForCachedData();
     _loadProducts();
   }
 
+  @override
+  void dispose() {
+    stopListeningForCachedData();
+    super.dispose();
+  }
+
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path.startsWith('/api/products/');
+
+  @override
+  Future<void> reloadFromCache() => _loadProducts();
+
   Future<void> _loadProducts() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _products.isEmpty;
       _errorMessage = null;
     });
     try {
@@ -133,7 +149,7 @@ class _WorkerInventoryScreenState extends State<WorkerInventoryScreen> {
       appBar: AppBar(title: const Text('Manage Stock')),
       body: _isLoading
           ? const LoadingStateView(message: 'Loading shop stock...')
-          : _errorMessage != null
+          : _errorMessage != null && _products.isEmpty
               ? ErrorStateView(message: _errorMessage!, onRetry: _loadProducts)
               : _products.isEmpty
                   ? const EmptyStateView(

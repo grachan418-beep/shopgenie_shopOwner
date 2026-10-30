@@ -11,9 +11,8 @@ class InvoiceService {
 
   Future<List<Invoice>> getInvoices() async {
     final response = await _api.get('/api/billing/');
-    final results = response is Map<String, dynamic>
-        ? response['results']
-        : response;
+    final results =
+        response is Map<String, dynamic> ? response['results'] : response;
     if (results is! List) {
       throw ApiException('The server returned an invalid invoice list.');
     }
@@ -28,7 +27,22 @@ class InvoiceService {
   }
 
   Future<ShopAnalytics> getAnalytics() async {
-    final response = await _api.get('/api/shops/dashboard/');
-    return ShopAnalytics.fromJson(response as Map<String, dynamic>);
+    final response = await _api.get(
+      '/api/shops/dashboard/',
+      cacheKey: 'business_overview',
+    );
+    if (response is! Map<String, dynamic>) {
+      throw ApiException('The server returned invalid dashboard analytics.');
+    }
+    return ShopAnalytics.fromJson(response);
+  }
+
+  Future<ShopAnalytics?> getCachedAnalytics() async {
+    final response = await _api.readCachedResponse(
+      'business_overview',
+      legacyPath: '/api/shops/dashboard/',
+    );
+    if (response is! Map<String, dynamic>) return null;
+    return ShopAnalytics.fromJson(response);
   }
 }

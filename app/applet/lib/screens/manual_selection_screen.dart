@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../services/cart_service.dart';
+import '../services/api_cache_listener.dart';
 import '../services/product_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
@@ -12,7 +13,8 @@ class ManualSelectionScreen extends StatefulWidget {
   State<ManualSelectionScreen> createState() => _ManualSelectionScreenState();
 }
 
-class _ManualSelectionScreenState extends State<ManualSelectionScreen> {
+class _ManualSelectionScreenState extends State<ManualSelectionScreen>
+    with ApiCacheListener<ManualSelectionScreen> {
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
 
@@ -24,12 +26,26 @@ class _ManualSelectionScreenState extends State<ManualSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    startListeningForCachedData();
     _fetchProducts();
   }
 
+  @override
+  void dispose() {
+    stopListeningForCachedData();
+    super.dispose();
+  }
+
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path.startsWith('/api/products/');
+
+  @override
+  Future<void> reloadFromCache() => _fetchProducts();
+
   Future<void> _fetchProducts() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _allProducts.isEmpty;
       _error = null;
     });
 
@@ -164,170 +180,155 @@ class _ManualSelectionScreenState extends State<ManualSelectionScreen> {
                   ],
                 ),
               ),
-
               const Divider(
                 height: 1,
                 color: AppTheme.borderLight,
               ),
-
               Expanded(
                 child: _isLoading
                     ? const LoadingStateView(
-                  message: 'Loading products...',
-                )
-                    : _error != null
-                    ? ErrorStateView(
-                  message: _error!,
-                  onRetry: _fetchProducts,
-                )
-                    : _filteredProducts.isEmpty
-                    ? const EmptyStateView(
-                  icon: Icons.search_off_outlined,
-                  title: 'No Products Found',
-                  message:
-                  'No products match your search.',
-                )
-                    : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    120,
-                  ),
-                  itemCount: _filteredProducts.length,
-                  separatorBuilder: (_, __) =>
-                  const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final product =
-                    _filteredProducts[index];
+                        message: 'Loading products...',
+                      )
+                    : _error != null && _allProducts.isEmpty
+                        ? ErrorStateView(
+                            message: _error!,
+                            onRetry: _fetchProducts,
+                          )
+                        : _filteredProducts.isEmpty
+                            ? const EmptyStateView(
+                                icon: Icons.search_off_outlined,
+                                title: 'No Products Found',
+                                message: 'No products match your search.',
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  120,
+                                ),
+                                itemCount: _filteredProducts.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (context, index) {
+                                  final product = _filteredProducts[index];
 
-                    final existing =
-                    cart.findByProductId(product.id);
+                                  final existing =
+                                      cart.findByProductId(product.id);
 
-                    return Card(
-                      child: ListTile(
-                        onTap: () =>
-                            _addProduct(product),
-                        leading: Container(
-                          padding:
-                          const EdgeInsets.all(9),
-                          decoration: BoxDecoration(
-                            color: product.isUnit
-                                ? AppTheme.primaryGreen
-                                .withOpacity(0.1)
-                                : AppTheme.accentAmber
-                                .withOpacity(0.1),
-                            borderRadius:
-                            BorderRadius.circular(9),
-                          ),
-                          child: Icon(
-                            product.isUnit
-                                ? Icons
-                                .inventory_2_outlined
-                                : Icons.scale_outlined,
-                            color: product.isUnit
-                                ? AppTheme.primaryGreen
-                                : AppTheme.accentAmber,
-                          ),
-                        ),
-                        title: Text(
-                          product.name,
-                          style: const TextStyle(
-                            fontWeight:
-                            FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '₹${product.pricePerUnit.toStringAsFixed(2)} / ${product.sellingType} • ${product.category}',
-                        ),
-                        trailing: existing != null
-                            ? CircleAvatar(
-                          radius: 14,
-                          child: Text(
-                            existing.quantity
-                                .toInt()
-                                .toString(),
-                            style:
-                            const TextStyle(
-                              fontSize: 12,
-                              fontWeight:
-                              FontWeight.bold,
-                            ),
-                          ),
-                        )
-                            : const Icon(
-                          Icons.add_circle_outline,
-                          color:
-                          AppTheme.primaryGreen,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                                  return Card(
+                                    child: ListTile(
+                                      onTap: () => _addProduct(product),
+                                      leading: Container(
+                                        padding: const EdgeInsets.all(9),
+                                        decoration: BoxDecoration(
+                                          color: product.isUnit
+                                              ? AppTheme.primaryGreen
+                                                  .withOpacity(0.1)
+                                              : AppTheme.accentAmber
+                                                  .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(9),
+                                        ),
+                                        child: Icon(
+                                          product.isUnit
+                                              ? Icons.inventory_2_outlined
+                                              : Icons.scale_outlined,
+                                          color: product.isUnit
+                                              ? AppTheme.primaryGreen
+                                              : AppTheme.accentAmber,
+                                        ),
+                                      ),
+                                      title: Text(
+                                        product.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        '₹${product.pricePerUnit.toStringAsFixed(2)} / ${product.sellingType} • ${product.category}',
+                                      ),
+                                      trailing: existing != null
+                                          ? CircleAvatar(
+                                              radius: 14,
+                                              child: Text(
+                                                existing.quantity
+                                                    .toInt()
+                                                    .toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.add_circle_outline,
+                                              color: AppTheme.primaryGreen,
+                                            ),
+                                    ),
+                                  );
+                                },
+                              ),
               ),
             ],
           ),
-
           bottomNavigationBar: cart.isEmpty
               ? null
               : SafeArea(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(
-                16,
-                12,
-                16,
-                12,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  top: BorderSide(
-                    color: AppTheme.borderLight,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      12,
+                      16,
+                      12,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        top: BorderSide(
+                          color: AppTheme.borderLight,
+                        ),
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          '${cart.itemCount} product${cart.itemCount == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.textMuted,
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${cart.itemCount} product${cart.itemCount == 1 ? '' : 's'}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '₹${cart.totalAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₹${cart.totalAmount.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryGreen,
+                        ElevatedButton.icon(
+                          onPressed: _doneAdding,
+                          icon: const Icon(Icons.check),
+                          label: const Text('Done Adding'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryGreen,
+                            minimumSize: const Size(150, 48),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: _doneAdding,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Done Adding'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                      AppTheme.primaryGreen,
-                      minimumSize:
-                      const Size(150, 48),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                ),
         );
       },
     );
@@ -345,20 +346,14 @@ class _ManualSelectionScreenState extends State<ManualSelectionScreen> {
           _applyFilters();
         });
       },
-      selectedColor:
-      AppTheme.primaryGreen.withOpacity(0.15),
+      selectedColor: AppTheme.primaryGreen.withOpacity(0.15),
       labelStyle: TextStyle(
         fontSize: 12,
-        fontWeight:
-        selected ? FontWeight.bold : FontWeight.w500,
-        color: selected
-            ? AppTheme.primaryGreen
-            : AppTheme.textDark,
+        fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+        color: selected ? AppTheme.primaryGreen : AppTheme.textDark,
       ),
       side: BorderSide(
-        color: selected
-            ? AppTheme.primaryGreen
-            : AppTheme.borderLight,
+        color: selected ? AppTheme.primaryGreen : AppTheme.borderLight,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/product.dart';
+import '../services/api_cache_listener.dart';
 import '../services/product_service.dart';
 
 class ProductsScreen extends StatefulWidget {
@@ -10,7 +11,8 @@ class ProductsScreen extends StatefulWidget {
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
-class _ProductsScreenState extends State<ProductsScreen> {
+class _ProductsScreenState extends State<ProductsScreen>
+    with ApiCacheListener<ProductsScreen> {
   final ProductService _productService = ProductService();
 
   List<Product> _products = [];
@@ -19,12 +21,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  final TextEditingController _searchController =
-  TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    startListeningForCachedData();
     _loadProducts();
 
     _searchController.addListener(_filterProducts);
@@ -32,14 +34,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   void dispose() {
+    stopListeningForCachedData();
     _searchController.removeListener(_filterProducts);
     _searchController.dispose();
     super.dispose();
   }
 
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path.startsWith('/api/products/');
+
+  @override
+  Future<void> reloadFromCache() => _loadProducts();
+
   Future<void> _loadProducts() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _products.isEmpty;
       _errorMessage = null;
     });
 
@@ -76,8 +86,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           final name = product.name.toLowerCase();
           final category = product.category.toLowerCase();
 
-          return name.contains(query) ||
-              category.contains(query);
+          return name.contains(query) || category.contains(query);
         }).toList();
       }
     });
@@ -159,8 +168,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               const SizedBox(height: 20),
 
               Row(
-                mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Products',
@@ -169,7 +177,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   Text(
                     '${_filteredProducts.length} products',
                     style: TextStyle(
@@ -188,20 +195,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else if (_errorMessage != null)
+              else if (_errorMessage != null && _products.isEmpty)
                 _buildErrorState()
               else if (_filteredProducts.isEmpty)
-                  _buildEmptyState()
-                else
-                  ..._filteredProducts.map(
-                        (product) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _ProductCard(
-                        product: product,
-                        onTap: () => _openProduct(product),
-                      ),
+                _buildEmptyState()
+              else
+                ..._filteredProducts.map(
+                  (product) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _ProductCard(
+                      product: product,
+                      onTap: () => _openProduct(product),
                     ),
                   ),
+                ),
 
               const SizedBox(height: 14),
 
@@ -333,13 +340,10 @@ class _ProductCard extends StatelessWidget {
                   size: 27,
                 ),
               ),
-
               const SizedBox(width: 14),
-
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       product.name,
@@ -348,9 +352,7 @@ class _ProductCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 4),
-
                     Text(
                       product.category,
                       style: TextStyle(
@@ -358,18 +360,14 @@ class _ProductCard extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       '₹${product.pricePerUnit.toStringAsFixed(2)} / $unit',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-
                     const SizedBox(height: 3),
-
                     Text(
                       'Stock: ${product.formattedQuantity}',
                       style: TextStyle(
@@ -377,7 +375,6 @@ class _ProductCard extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
-
                     if (product.isLoose) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -392,7 +389,6 @@ class _ProductCard extends StatelessWidget {
                   ],
                 ),
               ),
-
               const Icon(
                 Icons.chevron_right,
               ),

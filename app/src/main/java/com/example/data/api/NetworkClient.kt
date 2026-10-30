@@ -2,6 +2,7 @@ package com.example.data.api
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.BuildConfig
 import com.example.data.models.RefreshTokenRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -28,8 +29,8 @@ class NetworkClient(private val context: Context) {
         private const val KEY_SHOP_NAME = "shop_name"
         private const val KEY_USERNAME = "username"
 
-        // Default local and emulator-friendly endpoints
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8000/"
+        private const val LEGACY_EMULATOR_BASE_URL = "http://10.0.2.2:8000/"
+        val DEFAULT_BASE_URL: String = BuildConfig.SHOPGENIE_API_BASE_URL
         const val DEFAULT_ESP32_URL = "http://192.168.1.100:81/stream"
 
         @Volatile
@@ -44,7 +45,9 @@ class NetworkClient(private val context: Context) {
 
     var baseUrl: String
         get() {
-            var url = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
+            var url = prefs.getString(KEY_BASE_URL, null)
+                ?.takeUnless { it.trimEnd('/') == LEGACY_EMULATOR_BASE_URL.trimEnd('/') }
+                ?: DEFAULT_BASE_URL
             if (!url.endsWith("/")) url += "/"
             return url
         }

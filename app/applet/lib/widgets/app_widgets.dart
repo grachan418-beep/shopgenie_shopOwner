@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/product.dart';
@@ -19,9 +18,7 @@ class SellingTypeBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
-    final String label = sellingType.toUpperCase() == 'KG'
-        ? 'BY KG'
-        : 'UNIT';
+    final String label = sellingType.toUpperCase() == 'KG' ? 'BY KG' : 'UNIT';
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -69,11 +66,10 @@ class StockStatusBadge extends StatelessWidget {
       label = 'Out of Stock';
       badgeColor = colors.error;
     } else if (stockQuantity <= lowStockThreshold) {
-      final String formattedQuantity =
-          product?.formattedQuantity ??
-              (stockQuantity == stockQuantity.roundToDouble()
-                  ? '${stockQuantity.toInt()} units'
-                  : '$stockQuantity units');
+      final String formattedQuantity = product?.formattedQuantity ??
+          (stockQuantity == stockQuantity.roundToDouble()
+              ? '${stockQuantity.toInt()} units'
+              : '$stockQuantity units');
 
       label = 'Low: $formattedQuantity';
       badgeColor = colors.tertiary;
@@ -148,8 +144,8 @@ class StatCard extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
@@ -219,9 +215,9 @@ class ProductCard extends StatelessWidget {
                     Text(
                       '₹${product.pricePerUnit.toStringAsFixed(2)}',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: colors.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                            color: colors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(product.formattedQuantity),
@@ -359,7 +355,7 @@ class ErrorStateView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              message,
+              'This information is unavailable right now. Please try again.',
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[

@@ -44,6 +44,7 @@ void main() async {
     );
   };
   runApp(const ShopGenieApp());
+  ApiService().startConnectionMonitoring();
 }
 
 class ShopGenieApp extends StatelessWidget {
@@ -61,6 +62,20 @@ class ShopGenieApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: ThemeService().themeMode,
+          builder: (context, child) {
+            return ListenableBuilder(
+              listenable: ApiService(),
+              builder: (context, _) {
+                return Column(
+                  children: [
+                    if (ApiService().isBackendAvailable == false)
+                      const _OfflineBanner(),
+                    Expanded(child: child ?? const SizedBox.shrink()),
+                  ],
+                );
+              },
+            );
+          },
           initialRoute: '/',
           routes: {
             '/': (context) => const SplashScreen(),
@@ -111,6 +126,45 @@ class ShopGenieApp extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFFF3CD),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.wifi_off_rounded,
+                  size: 18,
+                  color: Color(0xFF8A5A00),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "You're offline — showing saved data.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF6D4C00),
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

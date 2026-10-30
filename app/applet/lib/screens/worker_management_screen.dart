@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/worker.dart';
+import '../services/api_cache_listener.dart';
 import '../services/api_service.dart';
 import '../services/worker_service.dart';
 import '../theme/app_theme.dart';
@@ -22,7 +23,8 @@ class WorkerManagementScreen extends StatefulWidget {
   State<WorkerManagementScreen> createState() => _WorkerManagementScreenState();
 }
 
-class _WorkerManagementScreenState extends State<WorkerManagementScreen> {
+class _WorkerManagementScreenState extends State<WorkerManagementScreen>
+    with ApiCacheListener<WorkerManagementScreen> {
   final WorkerService _service = WorkerService();
   List<Worker> _workers = [];
   bool _isLoading = true;
@@ -31,12 +33,27 @@ class _WorkerManagementScreenState extends State<WorkerManagementScreen> {
   @override
   void initState() {
     super.initState();
+    startListeningForCachedData();
     _loadWorkers();
   }
 
+  @override
+  void dispose() {
+    stopListeningForCachedData();
+    super.dispose();
+  }
+
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path == '/api/workers/' ||
+      RegExp(r'^/api/workers/\d+/$').hasMatch(url.path);
+
+  @override
+  Future<void> reloadFromCache() => _loadWorkers();
+
   Future<void> _loadWorkers() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _workers.isEmpty;
       _errorMessage = null;
     });
     try {
@@ -421,7 +438,7 @@ class _WorkerManagementScreenState extends State<WorkerManagementScreen> {
       ),
       body: _isLoading
           ? const LoadingStateView(message: 'Loading shopkeepers...')
-          : _errorMessage != null
+          : _errorMessage != null && _workers.isEmpty
               ? ErrorStateView(message: _errorMessage!, onRetry: _loadWorkers)
               : _workers.isEmpty
                   ? const EmptyStateView(

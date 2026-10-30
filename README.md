@@ -54,6 +54,7 @@ ShopGenie AI is a smart inventory and billing application designed to help shopk
 
 The Flutter mobile application communicates with the Django REST Framework backend. The backend manages authentication, products, inventory, billing, analytics, and supported computer vision operations.
 
+Flutter GET responses are cached locally with a 24-hour expiry. Screens display cached results while the API refreshes in the background; the app shows an offline banner if the backend cannot be reached and refreshes cached data when it reconnects. Logging out clears API response caches.
 
 
 The PostgreSQL database stores application data. The computer vision components are maintained in the `cv\_engine/` directory.
@@ -324,3 +325,19 @@ The image-processing and recognition workflow should be verified against the cur
 
 
 ShopGenie AI is under active development. The Flutter application, Django backend, PostgreSQL database, mobile camera integration, and computer vision workflow should be tested together as development progresses.
+# Run the Android app against the local Django API over Wi-Fi
+
+1. Connect the PC and Android phone to the same trusted Wi-Fi network.
+2. Start the API from `shopgenie_unified` with `.\run_lan.ps1` and leave it
+   running.
+3. Enable Android Wireless debugging. Pair with `adb pair <phone-ip>:<pairing-port>`
+   and connect with `adb connect <phone-ip>:<adb-port>`. USB is not required.
+4. Run `.\run_wifi_debug.ps1` from this repository. It detects the PC's current
+   Wi-Fi IP, installs the debug build over wireless ADB, and configures that
+   address as the app's API base URL. Use `-DeviceId <ip:port>` if multiple
+   wireless devices are connected.
+
+The app's default `10.0.2.2` URL is for Android emulators only. The LAN runner
+overrides that default for phones and replaces an old saved emulator URL. Use
+the development server only on a trusted private network; allow Python through
+Windows Firewall on private networks if prompted.

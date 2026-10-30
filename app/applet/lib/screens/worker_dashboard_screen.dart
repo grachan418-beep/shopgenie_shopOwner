@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/product.dart';
 import '../models/user.dart';
+import '../services/api_cache_listener.dart';
 import '../services/auth_service.dart';
 import '../services/dev_auto_login.dart';
 import '../services/product_service.dart';
@@ -18,7 +19,7 @@ class WorkerDashboardScreen extends StatefulWidget {
 }
 
 class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, ApiCacheListener<WorkerDashboardScreen> {
   User? _user;
   List<Product> _products = [];
   bool _isLoading = true;
@@ -44,6 +45,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    startListeningForCachedData();
     _loadDashboard();
     _sessionCheckTimer =
         Timer.periodic(const Duration(seconds: 30), (_) => _checkSession());
@@ -53,7 +55,21 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _sessionCheckTimer?.cancel();
+    stopListeningForCachedData();
     super.dispose();
+  }
+
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path == '/api/auth/me/' || url.path.startsWith('/api/products/');
+
+  @override
+  Future<void> reloadFromCache() async {
+    final user = await AuthService().fetchProfile();
+    if (mounted && user != null) {
+      setState(() => _user = user);
+    }
+    await _loadDashboard();
   }
 
   @override
@@ -77,7 +93,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
 
   Future<void> _loadDashboard() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _user == null && _products.isEmpty;
       _errorMessage = null;
     });
     try {
@@ -172,7 +188,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
     if (_isLoading) {
       return const LoadingStateView(message: 'Loading your shop...');
     }
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _user == null && _products.isEmpty) {
       return ErrorStateView(message: _errorMessage!, onRetry: _loadDashboard);
     }
     if (!_canViewProducts &&
@@ -191,6 +207,18 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_errorMessage != null)
+            ListTile(
+              leading: const Icon(
+                Icons.cloud_off_outlined,
+                color: AppTheme.textMuted,
+              ),
+              title: const Text('You’re offline. Showing saved information.'),
+              trailing: TextButton(
+                onPressed: _loadDashboard,
+                child: const Text('Retry'),
+              ),
+            ),
           Text(
             'Hello, ${_user?.username ?? ''}',
             style: const TextStyle(

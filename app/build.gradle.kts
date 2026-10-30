@@ -9,6 +9,11 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+val shopgenieApiBaseUrl = providers.gradleProperty("shopgenieApiBaseUrl")
+  .orElse("http://10.0.2.2:8000/")
+  .get()
+  .let { if (it.endsWith("/")) it else "$it/" }
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -21,6 +26,7 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField("String", "SHOPGENIE_API_BASE_URL", "\"$shopgenieApiBaseUrl\"")
   }
 
   signingConfigs {

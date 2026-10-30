@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/invoice.dart';
+import '../services/api_cache_listener.dart';
 import '../services/invoice_service.dart';
 import '../theme/app_theme.dart';
 
@@ -13,7 +14,8 @@ class InvoiceScreen extends StatefulWidget {
   State<InvoiceScreen> createState() => _InvoiceScreenState();
 }
 
-class _InvoiceScreenState extends State<InvoiceScreen> {
+class _InvoiceScreenState extends State<InvoiceScreen>
+    with ApiCacheListener<InvoiceScreen> {
   final InvoiceService _invoiceService = InvoiceService();
 
   List<Invoice> _invoices = [];
@@ -23,12 +25,27 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   @override
   void initState() {
     super.initState();
+    startListeningForCachedData();
     _loadHistory();
   }
 
+  @override
+  void dispose() {
+    stopListeningForCachedData();
+    super.dispose();
+  }
+
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path == '/api/billing/' ||
+      RegExp(r'^/api/billing/\d+/$').hasMatch(url.path);
+
+  @override
+  Future<void> reloadFromCache() => _loadHistory();
+
   Future<void> _loadHistory() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _invoices.isEmpty;
       _errorMessage = null;
     });
 
@@ -53,8 +70,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   Future<void> _openInvoice(Invoice invoice) async {
     try {
-      final detail =
-      await _invoiceService.getInvoiceDetail(invoice.id);
+      final detail = await _invoiceService.getInvoiceDetail(invoice.id);
 
       if (!mounted) return;
 
@@ -63,11 +79,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to load bill details: $e',
-          ),
-        ),
+        const SnackBar(
+            content: Text('Bill details are unavailable right now.')),
       );
     }
   }
@@ -88,10 +101,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             ),
             child: SingleChildScrollView(
               child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Bill Details',
                     style: TextStyle(
                       fontSize: 22,
@@ -112,9 +124,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                     )
                   else
                     ...invoice.items.map(
-                          (item) => Card(
-                        margin:
-                        const EdgeInsets.only(bottom: 8),
+                      (item) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: const CircleAvatar(
                             child: Icon(
@@ -129,7 +140,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           ),
                           subtitle: Text(
                             '${_formatQuantity(item.quantity)} × '
-                                '₹${item.unitPrice.toStringAsFixed(2)}',
+                            '₹${item.unitPrice.toStringAsFixed(2)}',
                           ),
                           trailing: Text(
                             '₹${item.totalPrice.toStringAsFixed(2)}',
@@ -148,12 +159,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                       color: AppTheme.primaryGreen.withValues(
                         alpha: 0.08,
                       ),
-                      borderRadius:
-                      BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
-                      mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
                           'Total',
@@ -167,8 +176,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color:
-                            AppTheme.primaryGreen,
+                            color: AppTheme.primaryGreen,
                           ),
                         ),
                       ],
@@ -224,11 +232,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final hour = date.hour == 0
         ? 12
         : date.hour > 12
-        ? date.hour - 12
-        : date.hour;
+            ? date.hour - 12
+            : date.hour;
 
-    final minute =
-    date.minute.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
 
     final period = date.hour >= 12 ? 'PM' : 'AM';
 
@@ -263,7 +270,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     return _invoices
         .where(
           (invoice) => _isToday(invoice.createdAt),
-    )
+        )
         .length;
   }
 
@@ -277,14 +284,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         continue;
       }
 
-      final key =
-          '${date.year}-'
+      final key = '${date.year}-'
           '${date.month.toString().padLeft(2, '0')}-'
           '${date.day.toString().padLeft(2, '0')}';
 
-      groups
-          .putIfAbsent(key, () => [])
-          .add(invoice);
+      groups.putIfAbsent(key, () => []).add(invoice);
     }
 
     return groups;
@@ -297,12 +301,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       );
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _invoices.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadHistory,
         child: ListView(
-          physics:
-          const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(24),
           children: [
             const SizedBox(height: 100),
@@ -322,11 +325,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _errorMessage!,
+              'You’re offline. Saved bills will appear here when available.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 18),
             Center(
@@ -345,8 +346,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       return RefreshIndicator(
         onRefresh: _loadHistory,
         child: ListView(
-          physics:
-          const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(24),
           children: [
             const SizedBox(height: 100),
@@ -417,8 +417,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           "Today's Sales",
@@ -433,14 +432,13 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                           style: const TextStyle(
                             fontSize: 25,
                             fontWeight: FontWeight.bold,
-                            color:
-                            AppTheme.primaryGreen,
+                            color: AppTheme.primaryGreen,
                           ),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           '$_todayBillCount '
-                              '${_todayBillCount == 1 ? 'bill' : 'bills'} today',
+                          '${_todayBillCount == 1 ? 'bill' : 'bills'} today',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 12,
@@ -458,8 +456,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
           // PREVIOUS BILLS
           Row(
-            mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'Previous Bills',
@@ -470,7 +467,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               ),
               Text(
                 '${_invoices.length} '
-                    '${_invoices.length == 1 ? 'Bill' : 'Bills'}',
+                '${_invoices.length == 1 ? 'Bill' : 'Bills'}',
                 style: TextStyle(
                   color: Colors.grey.shade600,
                 ),
@@ -481,18 +478,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           const SizedBox(height: 12),
 
           ..._invoices.map(
-                (invoice) => Padding(
-              padding:
-              const EdgeInsets.only(bottom: 10),
+            (invoice) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
               child: _PastBillCard(
                 invoice: invoice,
-                date:
-                _formatDate(invoice.createdAt),
-                time:
-                _formatTime(invoice.createdAt),
+                date: _formatDate(invoice.createdAt),
+                time: _formatTime(invoice.createdAt),
                 itemCount: invoice.items.length,
-                onTap: () =>
-                    _openInvoice(invoice),
+                onTap: () => _openInvoice(invoice),
               ),
             ),
           ),
@@ -511,7 +504,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           const SizedBox(height: 12),
 
           ...dailyGroups.entries.map(
-                (entry) {
+            (entry) {
               final dayInvoices = entry.value;
 
               double sales = 0;
@@ -520,8 +513,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 sales += invoice.totalAmount;
               }
 
-              final date =
-                  dayInvoices.first.createdAt;
+              final date = dayInvoices.first.createdAt;
 
               return _DailySalesRow(
                 date: _formatDate(date),
@@ -572,8 +564,7 @@ class _PastBillCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: InkWell(
-        borderRadius:
-        BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -588,8 +579,7 @@ class _PastBillCard extends StatelessWidget {
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Bill #${invoice.id}',
@@ -609,7 +599,7 @@ class _PastBillCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '$itemCount '
-                          '${itemCount == 1 ? 'item' : 'items'}',
+                      '${itemCount == 1 ? 'item' : 'items'}',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 13,
@@ -619,8 +609,7 @@ class _PastBillCard extends StatelessWidget {
                 ),
               ),
               Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
                     '₹${invoice.totalAmount.toStringAsFixed(2)}',
@@ -657,8 +646,7 @@ class _DailySalesRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin:
-      const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: const Icon(
           Icons.bar_chart_outlined,
@@ -671,7 +659,7 @@ class _DailySalesRow extends StatelessWidget {
         ),
         subtitle: Text(
           '$bills '
-              '${bills == 1 ? 'bill' : 'bills'}',
+          '${bills == 1 ? 'bill' : 'bills'}',
         ),
         trailing: Text(
           '₹${sales.toStringAsFixed(2)}',

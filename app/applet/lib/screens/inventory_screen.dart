@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/product.dart';
+import '../services/api_cache_listener.dart';
 import '../services/product_service.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -10,7 +11,8 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> {
+class _InventoryScreenState extends State<InventoryScreen>
+    with ApiCacheListener<InventoryScreen> {
   final ProductService _productService = ProductService();
 
   List<Product> _products = [];
@@ -19,13 +21,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  final TextEditingController _searchController =
-  TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
 
+    startListeningForCachedData();
     _loadProducts();
 
     _searchController.addListener(_filterProducts);
@@ -33,14 +35,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   void dispose() {
+    stopListeningForCachedData();
     _searchController.removeListener(_filterProducts);
     _searchController.dispose();
     super.dispose();
   }
 
+  @override
+  bool shouldReloadForCachedUrl(Uri url) =>
+      url.path.startsWith('/api/products/');
+
+  @override
+  Future<void> reloadFromCache() => _loadProducts();
+
   Future<void> _loadProducts() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _products.isEmpty;
       _errorMessage = null;
     });
 
@@ -108,8 +118,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lowStockCount =
-        _products.where(_isLowStock).length;
+    final lowStockCount = _products.where(_isLowStock).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -121,8 +130,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Current Stock',
@@ -151,19 +159,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     child: _SummaryCard(
                       title: 'Products',
                       value: '${_products.length}',
-                      icon:
-                      Icons.inventory_2_outlined,
+                      icon: Icons.inventory_2_outlined,
                     ),
                   ),
-
                   const SizedBox(width: 12),
-
                   Expanded(
                     child: _SummaryCard(
                       title: 'Low Stock',
                       value: '$lowStockCount',
-                      icon:
-                      Icons.warning_amber_outlined,
+                      icon: Icons.warning_amber_outlined,
                     ),
                   ),
                 ],
@@ -186,8 +190,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search products',
-                  prefixIcon:
-                  const Icon(Icons.search),
+                  prefixIcon: const Icon(Icons.search),
                   suffixIcon: IconButton(
                     onPressed: _loadProducts,
                     icon: const Icon(
@@ -195,8 +198,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     ),
                     tooltip: 'Refresh stock',
                   ),
-                  border:
-                  const OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
               ),
 
@@ -204,35 +206,30 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
               if (_isLoading)
                 const Padding(
-                  padding:
-                  EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     vertical: 40,
                   ),
                   child: Center(
-                    child:
-                    CircularProgressIndicator(),
+                    child: CircularProgressIndicator(),
                   ),
                 )
-              else if (_errorMessage != null)
+              else if (_errorMessage != null && _products.isEmpty)
                 _buildErrorState()
               else if (_filteredProducts.isEmpty)
-                  _buildEmptyState()
-                else
-                  ..._filteredProducts.map(
-                        (product) => Padding(
-                      padding:
-                      const EdgeInsets.only(
-                        bottom: 10,
-                      ),
-                      child: _StockCard(
-                        product: product,
-                        isLowStock:
-                        _isLowStock(product),
-                        onTap: () =>
-                            _openProduct(product),
-                      ),
+                _buildEmptyState()
+              else
+                ..._filteredProducts.map(
+                  (product) => Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 10,
+                    ),
+                    child: _StockCard(
+                      product: product,
+                      isLowStock: _isLowStock(product),
+                      onTap: () => _openProduct(product),
                     ),
                   ),
+                ),
 
               const SizedBox(height: 14),
 
@@ -248,8 +245,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     'Add Product to Stock',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                      FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -273,9 +269,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Icons.cloud_off_outlined,
               size: 48,
             ),
-
             const SizedBox(height: 12),
-
             const Text(
               'Could not load inventory',
               style: TextStyle(
@@ -283,27 +277,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
-              _errorMessage ??
-                  'Unknown error',
+              _errorMessage ?? 'Unknown error',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontSize: 13,
               ),
             ),
-
             const SizedBox(height: 16),
-
             ElevatedButton.icon(
               onPressed: _loadProducts,
-              icon:
-              const Icon(Icons.refresh),
-              label:
-              const Text('Try Again'),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
             ),
           ],
         ),
@@ -321,9 +308,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               Icons.inventory_2_outlined,
               size: 52,
             ),
-
             const SizedBox(height: 12),
-
             const Text(
               'No stock items found',
               style: TextStyle(
@@ -331,13 +316,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
-              _searchController.text
-                  .trim()
-                  .isEmpty
+              _searchController.text.trim().isEmpty
                   ? 'Add your first product to stock.'
                   : 'No product matches your search.',
               textAlign: TextAlign.center,
@@ -367,39 +348,31 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding:
-        const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             CircleAvatar(
               radius: 23,
               child: Icon(icon),
             ),
-
             const SizedBox(width: 10),
-
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
-                      color:
-                      Colors.grey.shade600,
+                      color: Colors.grey.shade600,
                       fontSize: 13,
                     ),
                   ),
-
                   const SizedBox(height: 3),
-
                   Text(
                     value,
                     style: const TextStyle(
                       fontSize: 21,
-                      fontWeight:
-                      FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
@@ -428,11 +401,9 @@ class _StockCard extends StatelessWidget {
     return Card(
       child: InkWell(
         onTap: onTap,
-        borderRadius:
-        BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding:
-          const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               const CircleAvatar(
@@ -441,100 +412,70 @@ class _StockCard extends StatelessWidget {
                   Icons.inventory_2_outlined,
                 ),
               ),
-
               const SizedBox(width: 14),
-
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       product.name,
-                      style:
-                      const TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
-                        fontWeight:
-                        FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 4),
-
                     Text(
                       product.category,
                       style: TextStyle(
-                        color:
-                        Colors.grey.shade600,
+                        color: Colors.grey.shade600,
                         fontSize: 13,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       'Quantity: ${product.formattedQuantity}',
-                      style:
-                      const TextStyle(
-                        fontWeight:
-                        FontWeight.w500,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-
                     const SizedBox(height: 3),
-
                     Text(
                       'Selling: ₹${product.pricePerUnit.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color:
-                        Colors.grey.shade700,
+                        color: Colors.grey.shade700,
                         fontSize: 13,
                       ),
                     ),
-
                     if (product.isLoose) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Loose Product',
                         style: TextStyle(
-                          color:
-                          Colors.green.shade700,
+                          color: Colors.green.shade700,
                           fontSize: 12,
-                          fontWeight:
-                          FontWeight.w600,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-
               Column(
                 children: [
                   Icon(
                     isLowStock
-                        ? Icons
-                        .warning_amber_outlined
-                        : Icons
-                        .check_circle_outline,
-                    color: isLowStock
-                        ? Colors.orange
-                        : Colors.green,
+                        ? Icons.warning_amber_outlined
+                        : Icons.check_circle_outline,
+                    color: isLowStock ? Colors.orange : Colors.green,
                   ),
-
                   const SizedBox(height: 4),
-
                   Text(
-                    isLowStock
-                        ? 'Low Stock'
-                        : 'In Stock',
+                    isLowStock ? 'Low Stock' : 'In Stock',
                     style: TextStyle(
                       fontSize: 11,
-                      color: isLowStock
-                          ? Colors.orange
-                          : Colors.green,
-                      fontWeight:
-                      FontWeight.w600,
+                      color: isLowStock ? Colors.orange : Colors.green,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],

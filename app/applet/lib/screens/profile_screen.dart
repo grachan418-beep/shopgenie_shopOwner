@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import '../services/api_cache_listener.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/dev_auto_login.dart';
 import '../services/theme_service.dart';
@@ -15,11 +17,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ApiCacheListener<ProfileScreen> {
   late TabController _tabController;
-  User? _user;
+  User? _user = AuthService().currentUser;
   bool _isLoading = true;
   String? _errorMessage;
+  DateTime? _lastUpdatedAt;
 
   // App preferences state
   bool _notificationsEnabled = true;
@@ -33,17 +36,42 @@ class _ProfileScreenState extends State<ProfileScreen>
       vsync: this,
       initialIndex: widget.initialTab.clamp(0, 1),
     );
+    startListeningForCachedData();
     _loadUserProfile();
     _loadPreferences();
   }
 
   @override
   void dispose() {
+    stopListeningForCachedData();
     _tabController.dispose();
     super.dispose();
   }
 
+  @override
+  bool shouldReloadForCachedUrl(Uri url) => url.path == '/api/auth/me/';
+
+  @override
+  Future<void> reloadFromCache() => _loadUserProfile();
+
   Future<void> _loadPreferences() async {
+    Map<String, dynamic>? cachedSettings;
+    try {
+      cachedSettings = await AuthService().getCachedSettings();
+      final cachedUpdatedAt = await AuthService().getCachedSettingsUpdatedAt();
+      final settings = cachedSettings;
+      if (settings != null && mounted) {
+        setState(() {
+          _notificationsEnabled =
+              settings['notifications_enabled'] as bool? ?? true;
+          _selectedLanguage = settings['language'] as String? ?? 'English (en)';
+          _lastUpdatedAt = _newestDate(_lastUpdatedAt, cachedUpdatedAt);
+        });
+      }
+    } catch (_) {
+      // Local preferences remain available if the cache cannot be read.
+    }
+
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
@@ -52,34 +80,103 @@ class _ProfileScreenState extends State<ProfileScreen>
             prefs.getString('sp_app_language') ?? 'English (en)';
       });
     }
+
+    if (cachedSettings == null ||
+        cachedSettings['notifications_enabled'] != _notificationsEnabled ||
+        cachedSettings['language'] != _selectedLanguage) {
+      await _persistSettingsSnapshot();
+    }
   }
 
   Future<void> _loadUserProfile() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _user == null;
       _errorMessage = null;
     });
 
     try {
-      // Fetch live authenticated profile from backend
-      User? user = AuthService().currentUser;
-      user ??= await AuthService().fetchProfile();
+      final cachedUser = await AuthService().getCachedProfile();
+      final cachedUpdatedAt = await AuthService().getCachedProfileUpdatedAt();
+      if (cachedUser != null && mounted) {
+        setState(() {
+          _user = cachedUser;
+          _isLoading = false;
+          _lastUpdatedAt = _newestDate(_lastUpdatedAt, cachedUpdatedAt);
+        });
+      }
+    } catch (_) {
+      // A malformed or expired cache should not prevent a fresh request.
+    }
+
+    try {
+      final User? user = await AuthService().fetchProfile();
 
       if (!mounted) return;
+      final updatedAt = await AuthService().getCachedProfileUpdatedAt();
       setState(() {
-        _user = user;
+        if (user != null) _user = user;
         _isLoading = false;
+        _errorMessage = _user == null
+            ? 'Your shop profile is unavailable right now.'
+            : null;
+        _lastUpdatedAt = _newestDate(_lastUpdatedAt, updatedAt);
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Unable to load shop profile: ${e.toString()}';
-        _isLoading = false;
-      });
+      if (_user == null) {
+        setState(() {
+          _errorMessage = 'Your shop profile is unavailable right now.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
+  DateTime? _newestDate(DateTime? first, DateTime? second) {
+    if (first == null) return second;
+    if (second == null) return first;
+    return first.isAfter(second) ? first : second;
+  }
+
+  Future<void> _persistSettingsSnapshot() async {
+    await AuthService().cacheSettings({
+      'notifications_enabled': _notificationsEnabled,
+      'language': _selectedLanguage,
+    });
+    final updatedAt = await AuthService().getCachedSettingsUpdatedAt();
+    if (mounted && updatedAt != null) {
+      setState(() => _lastUpdatedAt = _newestDate(_lastUpdatedAt, updatedAt));
+    }
+  }
+
+  Widget _lastUpdatedLabel() {
+    final updatedAt = _lastUpdatedAt;
+    if (updatedAt == null) return const SizedBox.shrink();
+    final localTime = updatedAt.toLocal().toString();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        'Last updated: ${localTime.substring(0, 16)}',
+        style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+      ),
+    );
+  }
+
+  bool get _isOffline => ApiService().isBackendAvailable == false;
+
+  void _showOfflineSaveMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Connect to the internet to save changes.'),
+      ),
+    );
+  }
+
   void _onEditShopDetails() {
+    if (_isOffline) {
+      _showOfflineSaveMessage();
+      return;
+    }
     _showEditShopModal();
   }
 
@@ -186,6 +283,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () {
+                      if (_isOffline) {
+                        _showOfflineSaveMessage();
+                        return;
+                      }
                       if (!formKey.currentState!.validate()) return;
                       Navigator.pop(ctx);
 
@@ -414,6 +515,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 setState(() => _selectedLanguage = lang);
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.setString('sp_app_language', lang);
+                await _persistSettingsSnapshot();
                 if (ctx.mounted) Navigator.pop(ctx);
               },
             );
@@ -484,19 +586,13 @@ class _ProfileScreenState extends State<ProfileScreen>
           ],
         ),
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryGreen),
-            )
-          : _errorMessage != null
-              ? _buildErrorView()
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildMyShopTab(),
-                    _buildSettingsTab(),
-                  ],
-                ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildMyShopTab(),
+          _buildSettingsTab(),
+        ],
+      ),
     );
   }
 
@@ -544,6 +640,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   // ==========================================
   Widget _buildMyShopTab() {
     final user = _user;
+    if (user == null && _isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryGreen),
+      );
+    }
+    if (user == null && _errorMessage != null) return _buildErrorView();
+
     final hasShop = user != null &&
         user.shopName != null &&
         user.shopName!.trim().isNotEmpty;
@@ -553,18 +656,19 @@ class _ProfileScreenState extends State<ProfileScreen>
       return _buildNoShopRegisteredView();
     }
 
-    final shopName = user?.shopName ?? '';
-    final ownerName = user?.ownerName ?? user?.username ?? 'Shopkeeper';
-    final category = user?.shopCategory ?? '';
-    final address = user?.shopAddress ?? '';
-    final phone = user?.phoneNumber ?? '';
-    final isVerified = user?.isVerified ?? false;
+    final shopName = user.shopName ?? '';
+    final ownerName = user.ownerName ?? user.username;
+    final category = user.shopCategory ?? '';
+    final address = user.shopAddress ?? '';
+    final phone = user.phoneNumber ?? '';
+    final isVerified = user.isVerified;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _lastUpdatedLabel(),
           // STORE HERO CARD
           Card(
             clipBehavior: Clip.antiAlias,
@@ -741,7 +845,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _onEditShopDetails,
+                    onPressed: _isOffline ? null : _onEditShopDetails,
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     label: const Text('Edit Shop Details'),
                     style: OutlinedButton.styleFrom(
@@ -762,6 +866,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ],
             ),
+            if (_isOffline) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Connect to the internet to save changes.',
+                style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
+            ],
           ] else ...[
             // Staff / Worker Read-only notice
             Container(
@@ -936,7 +1047,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => _showEditShopModal(isSetup: true),
+              onPressed:
+                  _isOffline ? null : () => _showEditShopModal(isSetup: true),
               icon: const Icon(Icons.storefront),
               label: const Text('Set Up My Shop'),
               style: ElevatedButton.styleFrom(
@@ -944,6 +1056,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               ),
             ),
+            if (_isOffline) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Connect to the internet to save changes.',
+                style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
+            ],
           ],
         ),
       ),
@@ -963,6 +1082,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _lastUpdatedLabel(),
           // ==============================
           // 1. SHOP MANAGEMENT (Owner Only)
           // ==============================
@@ -1065,6 +1185,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     setState(() => _notificationsEnabled = val);
                     final prefs = await SharedPreferences.getInstance();
                     await prefs.setBool('sp_push_notifications', val);
+                    await _persistSettingsSnapshot();
                   },
                 ),
                 const Divider(height: 1),
