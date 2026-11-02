@@ -15,6 +15,7 @@ data class UserDto(
 @JsonClass(generateAdapter = true)
 data class AuthResponse(
     val message: String? = null,
+    val detail: String? = null,
     val user: UserDto? = null,
     val access: String? = null,
     val refresh: String? = null,

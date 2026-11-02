@@ -8,11 +8,17 @@ import retrofit2.http.*
 interface ShopGenieApiService {
 
     // Authentication Endpoints
-    @POST("api/auth/register/")
+    @POST("api/auth/register/owner/")
     suspend fun register(@Body payload: Map<String, String>): Response<AuthResponse>
 
     @POST("api/auth/login/")
     suspend fun login(@Body payload: Map<String, String>): Response<AuthResponse>
+
+    @POST("api/auth/email-verification/confirm/")
+    suspend fun verifyEmail(@Body payload: Map<String, String>): Response<Map<String, String>>
+
+    @POST("api/auth/email-verification/resend/")
+    suspend fun resendVerification(@Body payload: Map<String, String>): Response<Map<String, String>>
 
     @POST("api/auth/refresh/")
     suspend fun refreshToken(@Body payload: RefreshTokenRequest): Response<RefreshTokenResponse>

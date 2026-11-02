@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/hcaptcha_widget.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,9 +18,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _shopNameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _verificationCodeController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _verificationPending = false;
+  bool _emailVerified = false;
+  bool _showCaptcha = false;
+  String? _captchaToken;
+  String? _captchaError;
+  int _captchaGeneration = 0;
   String? _errorMessage;
 
   @override
@@ -29,11 +37,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     _shopNameController.dispose();
     _phoneController.dispose();
+    _verificationCodeController.dispose();
     super.dispose();
   }
 
   Future<void> _handleRegister() async {
+    if (_verificationPending || _emailVerified) return;
     if (!_formKey.currentState!.validate()) return;
+    if (_captchaToken == null) {
+      setState(() {
+        _showCaptcha = true;
+        _errorMessage = null;
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -41,32 +58,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final response = await AuthService().register(
+      await AuthService().register(
         username: _usernameController.text,
         email: _emailController.text,
         password: _passwordController.text,
+        captchaToken: _captchaToken!,
         shopName: _shopNameController.text,
         phoneNumber: _phoneController.text,
       );
 
       if (!mounted) return;
-
-      if (response.access != null) {
-        Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
-      } else {
-        setState(() {
-          _errorMessage = response.message ?? 'Registration completed. Please log in.';
-        });
-      }
+      setState(() {
+        _verificationPending = true;
+        _captchaToken = null;
+        _showCaptcha = false;
+        _captchaError = null;
+        _captchaGeneration += 1;
+        _errorMessage = null;
+      });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.message;
+        _captchaToken = null;
+        _showCaptcha = false;
+        _captchaGeneration += 1;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMessage = 'Registration failed: $e';
+        _captchaToken = null;
+        _showCaptcha = false;
+        _captchaGeneration += 1;
       });
     } finally {
       if (mounted) {
@@ -74,6 +98,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _verifyEmail() async {
+    if (_verificationCodeController.text.trim().length != 6) {
+      setState(() => _errorMessage = 'Enter the 6-digit code from your email.');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await AuthService().verifyEmail(
+        email: _emailController.text,
+        code: _verificationCodeController.text,
+      );
+      if (!mounted) return;
+      setState(() {
+        _emailVerified = true;
+        _errorMessage = null;
+      });
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resendVerification() async {
+    if (_captchaToken == null) {
+      setState(() {
+        _showCaptcha = true;
+        _errorMessage = null;
+      });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await AuthService().resendVerification(
+        email: _emailController.text,
+        captchaToken: _captchaToken!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _captchaToken = null;
+        _showCaptcha = false;
+        _captchaGeneration += 1;
+        _errorMessage = null;
+      });
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -114,7 +195,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     decoration: BoxDecoration(
                       color: AppTheme.dangerRed.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.dangerRed.withOpacity(0.3)),
+                      border: Border.all(
+                          color: AppTheme.dangerRed.withOpacity(0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +204,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.error_outline, color: AppTheme.dangerRed, size: 20),
+                            const Icon(Icons.error_outline,
+                                color: AppTheme.dangerRed, size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -137,22 +220,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _isLoading ? null : _handleRegister,
-                              icon: const Icon(Icons.refresh, size: 16),
-                              label: const Text('Retry', style: TextStyle(fontSize: 12)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.dangerRed,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                minimumSize: const Size(80, 32),
+                        if (!_verificationPending && !_emailVerified)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: _isLoading ? null : _handleRegister,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Retry',
+                                    style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.dangerRed,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  minimumSize: const Size(80, 32),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
@@ -225,7 +311,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
                       ),
                       onPressed: () {
                         setState(() {
@@ -238,23 +326,102 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (val == null || val.isEmpty) {
                       return 'Please enter a password';
                     }
-                    if (val.length < 6) {
-                      return 'Password must be at least 6 characters';
+                    if (val.length < 10) {
+                      return 'Password must be at least 10 characters';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 28),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleRegister,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Create Account'),
-                ),
+                if (!_verificationPending &&
+                    !_emailVerified &&
+                    _showCaptcha) ...[
+                  HCaptchaWidget(
+                    key: ValueKey(_captchaGeneration),
+                    onToken: (token) => setState(() {
+                      _captchaToken = token;
+                      _showCaptcha = false;
+                      _captchaError = null;
+                    }),
+                    onError: (message) => setState(() {
+                      _captchaToken = null;
+                      _showCaptcha = false;
+                      _captchaError = message;
+                      _captchaGeneration += 1;
+                    }),
+                  ),
+                  if (_captchaError != null)
+                    Text(
+                      _captchaError!,
+                      style: const TextStyle(color: AppTheme.dangerRed),
+                    ),
+                  const SizedBox(height: 12),
+                ],
+                if (!_verificationPending && !_emailVerified)
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleRegister,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Create Account'),
+                  ),
+                if (_verificationPending && !_emailVerified) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'If registration can be completed, check your inbox for a verification code.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _verificationCodeController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                        labelText: 'Email verification code'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _verifyEmail,
+                    child: const Text('Verify email'),
+                  ),
+                  if (_showCaptcha) ...[
+                    HCaptchaWidget(
+                      key: ValueKey(_captchaGeneration),
+                      onToken: (token) => setState(() {
+                        _captchaToken = token;
+                        _showCaptcha = false;
+                        _captchaError = null;
+                      }),
+                      onError: (message) => setState(() {
+                        _captchaToken = null;
+                        _showCaptcha = false;
+                        _captchaError = message;
+                        _captchaGeneration += 1;
+                      }),
+                    ),
+                    if (_captchaError != null)
+                      Text(
+                        _captchaError!,
+                        style: const TextStyle(color: AppTheme.dangerRed),
+                      ),
+                  ],
+                  TextButton(
+                    onPressed: _isLoading ? null : _resendVerification,
+                    child: const Text('Resend code'),
+                  ),
+                ],
+                if (_emailVerified)
+                  Column(
+                    children: [
+                      const Text('Email verified. You can now sign in.'),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Go to sign in'),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

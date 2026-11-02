@@ -6,6 +6,7 @@ class User {
   final String? phoneNumber;
   final String? shopCategory;
   final String? shopAddress;
+  final String? shopPincode;
   final String? ownerName;
   final bool isVerified;
   final String role; // 'OWNER' or 'WORKER'
@@ -21,6 +22,7 @@ class User {
     this.phoneNumber,
     this.shopCategory,
     this.shopAddress,
+    this.shopPincode,
     this.ownerName,
     this.isVerified = false,
     this.role = 'OWNER',
@@ -44,6 +46,7 @@ class User {
           json['shop_category'] as String? ?? json['category'] as String?,
       shopAddress:
           json['shop_address'] as String? ?? json['address'] as String?,
+      shopPincode: json['pincode'] as String? ?? json['shop_pincode'] as String?,
       ownerName: json['owner_name'] as String?,
       isVerified: json['is_verified'] as bool? ?? false,
       role: json['role'] as String? ?? 'OWNER',
@@ -66,6 +69,7 @@ class User {
       'phone_number': phoneNumber,
       'shop_category': shopCategory,
       'shop_address': shopAddress,
+      'pincode': shopPincode,
       'owner_name': ownerName,
       'is_verified': isVerified,
       'role': role,
@@ -83,6 +87,7 @@ class User {
     String? phoneNumber,
     String? shopCategory,
     String? shopAddress,
+    String? shopPincode,
     String? ownerName,
     bool? isVerified,
     String? role,
@@ -98,6 +103,7 @@ class User {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       shopCategory: shopCategory ?? this.shopCategory,
       shopAddress: shopAddress ?? this.shopAddress,
+      shopPincode: shopPincode ?? this.shopPincode,
       ownerName: ownerName ?? this.ownerName,
       isVerified: isVerified ?? this.isVerified,
       role: role ?? this.role,

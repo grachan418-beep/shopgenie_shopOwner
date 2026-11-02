@@ -188,6 +188,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         TextEditingController(text: _user?.shopAddress ?? '');
     final phoneController =
         TextEditingController(text: _user?.phoneNumber ?? '');
+    final pincodeController =
+        TextEditingController(text: _user?.shopPincode ?? '');
     final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
@@ -277,34 +279,64 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   keyboardType: TextInputType.phone,
                 ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: pincodeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Pincode',
+                    prefixIcon: Icon(Icons.pin_drop_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  validator: (value) {
+                    final pincode = value?.trim() ?? '';
+                    return pincode.isEmpty || RegExp(r'^[0-9]{6}$').hasMatch(pincode)
+                        ? null
+                        : 'Enter a 6-digit pincode';
+                  },
+                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       if (_isOffline) {
                         _showOfflineSaveMessage();
                         return;
                       }
                       if (!formKey.currentState!.validate()) return;
-                      Navigator.pop(ctx);
-
-                      setState(() {
-                        _user = _user?.copyWith(
-                          shopName: nameController.text.trim(),
-                          shopCategory: categoryController.text.trim(),
-                          shopAddress: addressController.text.trim(),
-                          phoneNumber: phoneController.text.trim(),
+                      try {
+                        await AuthService().updateShopProfile({
+                          'name': nameController.text.trim(),
+                          'category': categoryController.text.trim(),
+                          'address': addressController.text.trim(),
+                          'phone': phoneController.text.trim(),
+                          'pincode': pincodeController.text.trim(),
+                        });
+                        if (!mounted) return;
+                        setState(() {
+                          _user = _user?.copyWith(
+                            shopName: nameController.text.trim(),
+                            shopCategory: categoryController.text.trim(),
+                            shopAddress: addressController.text.trim(),
+                            phoneNumber: phoneController.text.trim(),
+                            shopPincode: pincodeController.text.trim(),
+                          );
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Shop details updated successfully.'),
+                            backgroundColor: AppTheme.primaryGreen,
+                          ),
                         );
-                      });
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Shop details updated successfully.'),
-                          backgroundColor: AppTheme.primaryGreen,
-                        ),
-                      );
+                      } on ApiException catch (error) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(error.message)),
+                        );
+                      }
                     },
                     child:
                         Text(isSetup ? 'Complete Store Setup' : 'Save Changes'),

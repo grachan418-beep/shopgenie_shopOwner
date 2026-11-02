@@ -13,7 +13,6 @@ val shopgenieApiBaseUrl = providers.gradleProperty("shopgenieApiBaseUrl")
   .orElse("http://10.0.2.2:8000/")
   .get()
   .let { if (it.endsWith("/")) it else "$it/" }
-
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -113,6 +112,7 @@ dependencies {
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.hcaptcha.compose)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 

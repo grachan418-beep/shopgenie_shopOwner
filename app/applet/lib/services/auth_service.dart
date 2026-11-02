@@ -86,6 +86,7 @@ class AuthService {
         body: {
           'username': username.trim(),
           'password': password,
+          'role': 'SHOP_OWNER',
         },
         requiresAuth: false);
 
@@ -100,7 +101,7 @@ class AuthService {
       await _api.saveTokens(
         access: authResponse.access!,
         refresh: authResponse.refresh,
-        role: authResponse.user?.role ?? 'OWNER',
+        role: 'SHOP_OWNER',
       );
       _currentUser = authResponse.user;
       await fetchProfile();
@@ -112,6 +113,7 @@ class AuthService {
     required String username,
     required String email,
     required String password,
+    required String captchaToken,
     String? shopName,
     String? phoneNumber,
   }) async {
@@ -119,8 +121,11 @@ class AuthService {
       'username': username.trim(),
       'email': email.trim(),
       'password': password,
+      'captcha_token': captchaToken,
       if (shopName != null && shopName.trim().isNotEmpty)
         'shop_name': shopName.trim(),
+      if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+        'phone_number': phoneNumber.trim(),
     };
 
     final response = await _api.post(
@@ -130,9 +135,6 @@ class AuthService {
     );
     final authResponse =
         AuthResponse.fromJson(response as Map<String, dynamic>);
-    if (authResponse.user?.role.toUpperCase() != 'SHOP_OWNER') {
-      throw ApiException('Owner registration did not create an owner account.');
-    }
     if (authResponse.access != null) {
       await _api.saveTokens(
         access: authResponse.access!,
@@ -143,6 +145,35 @@ class AuthService {
       await fetchProfile();
     }
     return authResponse;
+  }
+
+  Future<void> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    final response = await _api.post(
+      '/api/auth/email-verification/confirm/',
+      body: {'email': email.trim(), 'code': code.trim()},
+      requiresAuth: false,
+    );
+    if (response is! Map<String, dynamic>) {
+      throw ApiException(
+          'The server returned an invalid verification response.');
+    }
+  }
+
+  Future<void> resendVerification({
+    required String email,
+    required String captchaToken,
+  }) async {
+    final response = await _api.post(
+      '/api/auth/email-verification/resend/',
+      body: {'email': email.trim(), 'captcha_token': captchaToken},
+      requiresAuth: false,
+    );
+    if (response is! Map<String, dynamic>) {
+      throw ApiException('The server returned an invalid resend response.');
+    }
   }
 
   Future<AuthResponse> loginWorker(String name, String code) async {
@@ -180,6 +211,20 @@ class AuthService {
     }
     _currentUser = User.fromJson(response);
     return _currentUser;
+  }
+
+  Future<Map<String, dynamic>> updateShopProfile(
+    Map<String, dynamic> profile,
+  ) async {
+    final response = await _api.patch(
+      '/api/shops/my_shop/',
+      body: profile,
+    );
+    if (response is! Map<String, dynamic>) {
+      throw ApiException(
+          'The server returned an invalid shop profile response.');
+    }
+    return response;
   }
 
   Future<void> logout() async {

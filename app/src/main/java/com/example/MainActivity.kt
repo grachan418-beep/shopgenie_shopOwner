@@ -98,10 +98,6 @@ fun MainAppNavigation(networkClient: NetworkClient) {
             is Screen.Register -> {
                 RegistrationScreen(
                     networkClient = networkClient,
-                    onRegisterSuccess = {
-                        backStack.clear()
-                        backStack.add(Screen.Home)
-                    },
                     onNavigateBackToLogin = {
                         popBack()
                     }

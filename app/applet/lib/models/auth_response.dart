@@ -27,7 +27,7 @@ class AuthResponse {
     }
 
     return AuthResponse(
-      message: json['message'] as String?,
+      message: json['message'] as String? ?? json['detail'] as String?,
       access: acc,
       refresh: ref,
       user: json['user'] != null && json['user'] is Map<String, dynamic>

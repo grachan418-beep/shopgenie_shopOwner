@@ -57,7 +57,11 @@ fun LoginScreen(
             try {
                 networkClient.baseUrl = serverUrl
                 val response = networkClient.apiService.login(
-                    mapOf("username" to username.trim(), "password" to password)
+                    mapOf(
+                        "username" to username.trim(),
+                        "password" to password,
+                        "role" to "SHOP_OWNER"
+                    )
                 )
 
                 if (response.isSuccessful && response.body() != null) {
